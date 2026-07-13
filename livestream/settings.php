@@ -30,15 +30,21 @@ if ($ADMIN->fulltree) {
         get_string('settingsobsheading', 'mod_livestream'),
         get_string('settingsobsheading_desc', 'mod_livestream')));
 
+    // Defaults are intentionally empty: mod_form validation treats an empty
+    // value as "not configured" and blocks teachers from creating an OBS
+    // activity until an admin sets a real, reachable URL. A non-empty
+    // placeholder would pass that check and let teachers save activities that
+    // silently point at a non-existent server. The expected format is shown in
+    // each setting's description string instead.
     $settings->add(new admin_setting_configtext('mod_livestream/rtmpserver',
         get_string('settingrtmpserver', 'mod_livestream'),
         get_string('settingrtmpserver_desc', 'mod_livestream'),
-        'rtmp://your-media-server:1935/live', PARAM_TEXT));
+        '', PARAM_TEXT));
 
     $settings->add(new admin_setting_configtext('mod_livestream/hlsbaseurl',
         get_string('settinghlsbaseurl', 'mod_livestream'),
         get_string('settinghlsbaseurl_desc', 'mod_livestream'),
-        'https://your-media-server:8888', PARAM_URL));
+        '', PARAM_URL));
 
     $settings->add(new admin_setting_configtext('mod_livestream/hlsjsurl',
         get_string('settinghlsjsurl', 'mod_livestream'),
