@@ -11,12 +11,19 @@ Requires **Moodle 4.4+**.
 
 | Path | What it is |
 |---|---|
-| `livestream/` | The Moodle plugin — install into `moodle/mod/livestream` |
+| `livestream/` | The Moodle plugin — install into `mod/livestream` (`public/mod/livestream` on Moodle 5.1+) |
 | `media-server/` | Docker-compose for MediaMTX (RTMP in → HLS out), needed for OBS mode |
 
 ## 1. Install the plugin
 
+Copy the plugin into your Moodle's activity module directory. On Moodle 5.1
+and later the web root moved under `public/`, so the plugin lives in
+`public/mod/`; on 4.4–5.0 it is `mod/`.
+
 ```bash
+# Moodle 5.1+
+cp -r livestream /path/to/moodle/public/mod/livestream
+# Moodle 4.4–5.0
 cp -r livestream /path/to/moodle/mod/livestream
 ```
 
@@ -51,7 +58,11 @@ Then in Moodle: **Site administration → Plugins → Activity modules → Live 
 | Setting | Example |
 |---|---|
 | RTMP server URL | `rtmp://media.example.com:1935` |
-| HLS base URL | `https://media.example.com:8888` |
+| HLS base URL | `https://media.example.com` (reverse proxy terminating TLS in front of port 8888) |
+
+The HLS base URL must be reachable **both** from students' browsers and from
+the Moodle server itself — the LIVE check probes the manifest server-side —
+so use one public HTTPS URL rather than an internal address.
 
 ## 3. Set up Zoom (Zoom mode)
 
@@ -78,7 +89,7 @@ A **Live streams** item also appears in the course navigation (under *More* in t
 
 ## คู่มือย่อ (ภาษาไทย)
 
-1. ติดตั้งปลั๊กอิน: คัดลอกโฟลเดอร์ `livestream` ไปไว้ที่ `moodle/mod/livestream` แล้วเข้า **Site administration → Notifications**
+1. ติดตั้งปลั๊กอิน: คัดลอกโฟลเดอร์ `livestream` ไปไว้ที่ `mod/livestream` (บน Moodle 5.1+ คือ `public/mod/livestream`) แล้วเข้า **Site administration → Notifications**
 2. โหมด OBS: รัน media server ด้วย `docker compose up -d` ในโฟลเดอร์ `media-server` แล้วตั้งค่า RTMP/HLS URL ในหน้าตั้งค่าปลั๊กอิน
 3. ครูสร้างกิจกรรม "ถ่ายทอดสด" ในรายวิชา → เปิดกิจกรรมจะเห็น Server URL และ Stream key → นำไปใส่ใน OBS (Settings → Stream → Custom) → กด Start Streaming
 4. นักเรียนเปิดกิจกรรม วิดีโอจะเล่นอัตโนมัติเมื่อครูเริ่มสตรีม
@@ -95,15 +106,3 @@ A **Live streams** item also appears in the course navigation (under *More* in t
 ## License
 
 GPL v3 or later, same as Moodle.
-
-
-###สรุปทุกขั้นตอนที่ทำ
-
-1. ตรวจโครงสร้าง plugin — mod/livestream มีไฟล์ครบ (version.php, lib.php, db/install.xml, lang, mod_form.php ฯลฯ)
-2. ลองรัน upgrade ครั้งแรก → ไม่เจอ plugin — เพราะตั้งแต่ Moodle 5.1 เป็นต้นมา web root ย้ายไปอยู่ใต้ public/ ทำให้ $CFG->dirroot ชี้ไปที่ /var/www/moodle/public โฟลเดอร์ mod/ ที่ระดับบนสุดจึงไม่ถูกสแกนเลย (สังเกตได้จาก git status ที่ขึ้น ?? mod/ ทั้งโฟลเดอร์ — module มาตรฐานทั้งหมดอยู่ที่ public/mod/)
-3. ย้ายไปที่ถูกต้อง
-mv mod/livestream public/mod/livestream
-3. แล้วลบโฟลเดอร์ mod/ เปล่าทิ้ง
-4. รัน database upgrade ใน container moodle-web ด้วย user www-data (กันปัญหาสิทธิ์ไฟล์ cache):
-docker exec -u www-data moodle-web php /var/www/moodle/admin/cli/upgrade.php --non-interactive --allow-unstable
-4. ต้องใส่ --allow-unstable เพราะ site เป็น 5.3dev — ผลคือ mod_livestream ++ Success พร้อมสร้าง settiบด้วย admin ที่ Site
