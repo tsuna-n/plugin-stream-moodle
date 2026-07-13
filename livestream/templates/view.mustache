@@ -1,0 +1,136 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+}}
+{{!
+    @template mod_livestream/view
+
+    Main activity view for teachers and students.
+
+    Context variables required for this template:
+    * name - Activity name
+    * intro - Formatted intro HTML
+    * isobs - Whether this is an OBS/RTMP stream
+    * iszoom - Whether this is a Zoom meeting
+    * canmanage - Whether the viewer can manage the stream
+
+    Example context (json):
+    {
+        "name": "Weekly lecture",
+        "intro": "<p>Welcome</p>",
+        "isobs": true,
+        "iszoom": false,
+        "canmanage": false,
+        "starttime": "Monday, 13 July 2026, 7:00 PM",
+        "hlsurl": "https://media.example.com/abc123/index.m3u8",
+        "cmid": 12,
+        "recordingurl": ""
+    }
+}}
+<div class="mod_livestream-view">
+
+    {{#intro}}
+        <div class="mod_livestream-intro mb-3">{{{intro}}}</div>
+    {{/intro}}
+
+    {{#starttime}}
+        <p class="mod_livestream-schedule">
+            <i class="icon fa fa-calendar" aria-hidden="true"></i>
+            {{#str}} scheduledfor, mod_livestream, {{starttime}} {{/str}}
+        </p>
+    {{/starttime}}
+
+    {{#isobs}}
+        <div class="mod_livestream-status mb-2" id="livestream-status-{{cmid}}">
+            <span class="badge badge-secondary bg-secondary" data-region="status-badge">
+                {{#str}} statuschecking, mod_livestream {{/str}}
+            </span>
+        </div>
+
+        <div class="mod_livestream-player ratio ratio-16x9 mb-3" data-region="player-wrap" style="display:none;">
+            <video id="livestream-video-{{cmid}}" controls playsinline class="w-100"></video>
+        </div>
+
+        <div class="mod_livestream-offline alert alert-info" data-region="offline-message">
+            {{#str}} streamoffline, mod_livestream {{/str}}
+        </div>
+
+        {{#canmanage}}
+            <div class="card mt-4 mod_livestream-teacherbox">
+                <div class="card-header">
+                    <i class="icon fa fa-video-camera" aria-hidden="true"></i>
+                    {{#str}} obssetup, mod_livestream {{/str}}
+                </div>
+                <div class="card-body">
+                    <p>{{#str}} obssetup_help, mod_livestream {{/str}}</p>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">{{#str}} rtmpserver, mod_livestream {{/str}}</dt>
+                        <dd class="col-sm-9"><code>{{rtmpserver}}</code></dd>
+                        <dt class="col-sm-3">{{#str}} streamkey, mod_livestream {{/str}}</dt>
+                        <dd class="col-sm-9">
+                            <code class="mod_livestream-key">{{streamkey}}</code>
+                        </dd>
+                    </dl>
+                    <p class="text-muted small mt-2 mb-0">{{#str}} streamkeywarning, mod_livestream {{/str}}</p>
+                </div>
+            </div>
+        {{/canmanage}}
+    {{/isobs}}
+
+    {{#iszoom}}
+        {{#zoomconfigured}}
+            <div class="card mod_livestream-zoombox">
+                <div class="card-body text-center">
+                    <p class="mb-3">
+                        <i class="icon fa fa-video-camera fa-2x" aria-hidden="true"></i>
+                    </p>
+                    {{#canmanage}}
+                        {{#zoomstarturl}}
+                            <a href="{{zoomstarturl}}" target="_blank" rel="noopener" class="btn btn-primary btn-lg mb-2">
+                                {{#str}} startmeeting, mod_livestream {{/str}}
+                            </a>
+                            <br>
+                        {{/zoomstarturl}}
+                    {{/canmanage}}
+                    <a href="{{zoomjoinurl}}" target="_blank" rel="noopener" class="btn {{#canmanage}}btn-secondary{{/canmanage}}{{^canmanage}}btn-primary btn-lg{{/canmanage}} mb-3">
+                        {{#str}} joinmeeting, mod_livestream {{/str}}
+                    </a>
+                    <dl class="row justify-content-center mb-0">
+                        <dt class="col-sm-3 text-sm-end">{{#str}} meetingid, mod_livestream {{/str}}</dt>
+                        <dd class="col-sm-4 text-sm-start">{{zoommeetingid}}</dd>
+                        {{#zoompasscode}}
+                            <dt class="col-sm-3 text-sm-end">{{#str}} zoompasscode, mod_livestream {{/str}}</dt>
+                            <dd class="col-sm-4 text-sm-start">{{zoompasscode}}</dd>
+                        {{/zoompasscode}}
+                    </dl>
+                </div>
+            </div>
+        {{/zoomconfigured}}
+        {{^zoomconfigured}}
+            <div class="alert alert-warning">
+                {{#str}} zoommeetingmissing, mod_livestream {{/str}}
+            </div>
+        {{/zoomconfigured}}
+    {{/iszoom}}
+
+    {{#recordingurl}}
+        <div class="mt-4">
+            <a href="{{recordingurl}}" target="_blank" rel="noopener" class="btn btn-outline-secondary">
+                <i class="icon fa fa-play-circle" aria-hidden="true"></i>
+                {{#str}} watchrecording, mod_livestream {{/str}}
+            </a>
+        </div>
+    {{/recordingurl}}
+</div>

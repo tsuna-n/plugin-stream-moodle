@@ -1,0 +1,34 @@
+# MediaMTX configuration for the Moodle mod_livestream plugin.
+#
+# Flow: OBS publishes RTMP to rtmp://<server>:1935/<streamkey>
+#       Students play HLS from  http(s)://<server>:8888/<streamkey>/index.m3u8
+#
+# The stream key is a 32-character random secret generated per activity by the
+# plugin, so path secrecy is the access control for publishing. Keep this
+# server behind HTTPS (see README) so keys are never sent in clear text.
+
+logLevel: info
+
+# --- RTMP ingest -------------------------------------------------------------
+rtmp: yes
+rtmpAddress: :1935
+
+# --- HLS output --------------------------------------------------------------
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+# Allow the Moodle page (different origin) to fetch the playlist and segments.
+hlsAllowOrigin: "*"
+
+# --- Disable everything not needed ------------------------------------------
+rtsp: no
+webrtc: no
+srt: no
+
+# Accept any path (the plugin's random stream keys arrive as paths).
+paths:
+  all_others:
