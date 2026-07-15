@@ -54,32 +54,60 @@ $PAGE->set_activity_record($livestream);
 $canmanage = has_capability('mod/livestream:managestream', $context);
 $config = get_config('mod_livestream');
 
+$isobs = (int) $livestream->streamtype === LIVESTREAM_TYPE_OBS;
+$iszoom = (int) $livestream->streamtype === LIVESTREAM_TYPE_ZOOM;
+
+// The media server is what turns a Zoom meeting into an embedded stream: with
+// it configured, Zoom relays to our RTMP and both modes share one HLS player.
+$hasmedia = !empty($config->rtmpserver) && !empty($config->hlsbaseurl);
+$zoomembed = $iszoom && $hasmedia && !empty($livestream->zoommeetingid);
+$showplayer = $isobs || $zoomembed;
+
 $data = [
     'name' => format_string($livestream->name),
     'intro' => format_module_intro('livestream', $livestream, $cm->id),
-    'isobs' => (int) $livestream->streamtype === LIVESTREAM_TYPE_OBS,
-    'iszoom' => (int) $livestream->streamtype === LIVESTREAM_TYPE_ZOOM,
+    'isobs' => $isobs,
+    'iszoom' => $iszoom,
+    'zoomembed' => $zoomembed,
+    'showplayer' => $showplayer,
     'canmanage' => $canmanage,
     'starttime' => $livestream->starttime ? userdate($livestream->starttime) : '',
     'recordingurl' => $livestream->recordingurl ?: '',
 ];
 
-if ($data['isobs']) {
+if ($showplayer) {
     $hlsbase = rtrim($config->hlsbaseurl ?? '', '/');
     $data['hlsurl'] = $hlsbase . '/' . $livestream->streamkey . '/index.m3u8';
     $data['cmid'] = $cm->id;
-    if ($canmanage) {
-        $data['rtmpserver'] = $config->rtmpserver ?? '';
-        $data['streamkey'] = $livestream->streamkey;
-    }
     $PAGE->requires->js_call_amd('mod_livestream/player', 'init', [[
         'cmid' => $cm->id,
         'hlsurl' => $data['hlsurl'],
         'hlsjsurl' => $config->hlsjsurl ?? 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
     ]]);
+    if ($canmanage) {
+        $data['attendanceurl'] = (new moodle_url('/mod/livestream/attendance.php', ['id' => $cm->id]))->out(false);
+    }
+
+    // Plain Zoom mode already has Zoom's own chat; the custom panel is only
+    // needed where students would otherwise have no way to interact (OBS,
+    // or Zoom relayed into this embedded player).
+    $data['canchat'] = has_capability('mod/livestream:chat', $context);
+    if ($data['canchat']) {
+        $PAGE->requires->js_call_amd('mod_livestream/chat', 'init', [[
+            'cmid' => $cm->id,
+            'canmoderate' => $canmanage,
+        ]]);
+    }
 }
 
-if ($data['iszoom']) {
+if ($isobs && $canmanage) {
+    $data['rtmpserver'] = $config->rtmpserver ?? '';
+    $data['streamkey'] = $livestream->streamkey;
+}
+
+if ($iszoom) {
+    // Students only get the join button when there is no embedded player.
+    $data['zoomjoinonly'] = !$zoomembed;
     $data['zoomconfigured'] = !empty($livestream->zoommeetingid);
     $data['zoomjoinurl'] = $livestream->zoomjoinurl ?: '';
     $data['zoommeetingid'] = $livestream->zoommeetingid;

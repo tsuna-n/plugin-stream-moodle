@@ -138,6 +138,14 @@ function livestream_delete_instance($id) {
         livestream_delete_zoom_meeting($livestream->zoommeetingid);
     }
 
+    $sessionids = $DB->get_fieldset_select('livestream_session', 'id', 'livestreamid = ?', [$id]);
+    if (!empty($sessionids)) {
+        [$insql, $inparams] = $DB->get_in_or_equal($sessionids);
+        $DB->delete_records_select('livestream_attendance', "sessionid $insql", $inparams);
+    }
+    $DB->delete_records('livestream_session', ['livestreamid' => $id]);
+    $DB->delete_records('livestream_chat', ['livestreamid' => $id]);
+
     $DB->delete_records('event', ['modulename' => 'livestream', 'instance' => $id]);
     $DB->delete_records('livestream', ['id' => $id]);
 
@@ -172,7 +180,10 @@ function livestream_create_zoom_meeting($data) {
         $data->zoomjoinurl = '';
         $data->zoomstarturl = '';
         \core\notification::error(get_string('zoomcreatefailed', 'mod_livestream', $e->getMessage()));
+        return;
     }
+
+    livestream_configure_zoom_livestream($data);
 }
 
 /**
@@ -191,6 +202,40 @@ function livestream_sync_zoom_meeting($data) {
         );
     } catch (\moodle_exception $e) {
         \core\notification::warning(get_string('zoomupdatefailed', 'mod_livestream', $e->getMessage()));
+    }
+
+    livestream_configure_zoom_livestream($data);
+}
+
+/**
+ * Points the meeting's custom live stream at our media server so Zoom relays
+ * the lesson to the same RTMP path OBS would use, and it shows up in the
+ * embedded Moodle player. No-op (best effort) when the media server isn't
+ * configured — such a site just keeps the plain join-Zoom behaviour.
+ *
+ * @param stdClass $data instance data (needs zoommeetingid, streamkey, course)
+ */
+function livestream_configure_zoom_livestream($data) {
+    global $CFG;
+
+    if (empty($data->zoommeetingid)) {
+        return;
+    }
+    $config = get_config('mod_livestream');
+    if (empty($config->rtmpserver) || empty($config->hlsbaseurl)) {
+        return;
+    }
+
+    try {
+        $client = new \mod_livestream\local\zoom_client();
+        $client->set_livestream(
+            $data->zoommeetingid,
+            $config->rtmpserver,
+            $data->streamkey,
+            $CFG->wwwroot . '/course/view.php?id=' . $data->course
+        );
+    } catch (\moodle_exception $e) {
+        \core\notification::warning(get_string('zoomlivestreamfailed', 'mod_livestream', $e->getMessage()));
     }
 }
 
@@ -259,7 +304,7 @@ function livestream_update_calendar($data) {
  * @param context_course $context the course context
  */
 function livestream_extend_navigation_course(navigation_node $navigation, stdClass $course, context_course $context) {
-    global $DB;
+    global $DB, $PAGE;
 
     if (!has_capability('mod/livestream:view', $context)) {
         return;
@@ -277,6 +322,10 @@ function livestream_extend_navigation_course(navigation_node $navigation, stdCla
         'livestreams',
         new pix_icon('monologo', '', 'mod_livestream')
     );
+
+    // Decorates the nav link above with a live badge, polled client-side so
+    // course pages never block on a media-server round trip.
+    $PAGE->requires->js_call_amd('mod_livestream/navbadge', 'init', [['courseid' => $course->id]]);
 }
 
 /**

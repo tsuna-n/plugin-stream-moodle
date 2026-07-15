@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Version information for mod_livestream.
+ * Scheduled task definitions for mod_livestream.
  *
  * @package    mod_livestream
  * @copyright  2026 Your Name
@@ -24,8 +24,14 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'mod_livestream';
-$plugin->version   = 2026071600;
-$plugin->requires  = 2024042200; // Moodle 4.4.
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.2.0';
+$tasks = [
+    [
+        'classname' => 'mod_livestream\task\close_stale_sessions',
+        'blocking' => 0,
+        'minute' => '*/5',
+        'hour' => '*',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+    ],
+];

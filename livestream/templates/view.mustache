@@ -24,7 +24,11 @@
     * intro - Formatted intro HTML
     * isobs - Whether this is an OBS/RTMP stream
     * iszoom - Whether this is a Zoom meeting
+    * zoomembed - Whether the Zoom meeting is relayed into the embedded player
+    * showplayer - Whether to render the embedded HLS player
     * canmanage - Whether the viewer can manage the stream
+    * attendanceurl - Link to the attendance report (canmanage + showplayer only)
+    * canchat - Whether the viewer may use the live chat panel (showplayer + mod/livestream:chat)
 
     Example context (json):
     {
@@ -32,6 +36,8 @@
         "intro": "<p>Welcome</p>",
         "isobs": true,
         "iszoom": false,
+        "zoomembed": false,
+        "showplayer": true,
         "canmanage": false,
         "starttime": "Monday, 13 July 2026, 7:00 PM",
         "hlsurl": "https://media.example.com/abc123/index.m3u8",
@@ -52,7 +58,7 @@
         </p>
     {{/starttime}}
 
-    {{#isobs}}
+    {{#showplayer}}
         <div class="mod_livestream-status mb-2" id="livestream-status-{{cmid}}">
             <span class="badge badge-secondary bg-secondary" data-region="status-badge">
                 {{#str}} statuschecking, mod_livestream {{/str}}
@@ -67,6 +73,44 @@
             {{#str}} streamoffline, mod_livestream {{/str}}
         </div>
 
+        <div class="mod_livestream-recording mb-3" data-region="recording" style="display:none;">
+            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary" data-region="recording-link">
+                <i class="icon fa fa-play-circle" aria-hidden="true"></i>
+                {{#str}} watchrecording, mod_livestream {{/str}}
+            </a>
+        </div>
+
+        {{#canmanage}}
+            <p class="mb-3">
+                <a href="{{attendanceurl}}">
+                    <i class="icon fa fa-list-alt" aria-hidden="true"></i>
+                    {{#str}} attendance, mod_livestream {{/str}}
+                </a>
+            </p>
+        {{/canmanage}}
+
+        {{#canchat}}
+            <div class="mod_livestream-chat card mb-3" data-region="chat" data-cmid="{{cmid}}">
+                <div class="card-header">{{#str}} chatheading, mod_livestream {{/str}}</div>
+                <div class="card-body">
+                    <div class="mod_livestream-chat-messages mb-2" data-region="chat-messages"></div>
+                    <form data-region="chat-form" class="d-flex gap-2">
+                        <label class="visually-hidden" for="livestream-chat-input-{{cmid}}">
+                            {{#str}} chatplaceholder, mod_livestream {{/str}}
+                        </label>
+                        <input type="text" class="form-control" id="livestream-chat-input-{{cmid}}"
+                            data-region="chat-input" maxlength="500"
+                            placeholder="{{#str}} chatplaceholder, mod_livestream {{/str}}">
+                        <button type="submit" class="btn btn-primary">
+                            {{#str}} chatsend, mod_livestream {{/str}}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        {{/canchat}}
+    {{/showplayer}}
+
+    {{#isobs}}
         {{#canmanage}}
             <div class="card mt-4 mod_livestream-teacherbox">
                 <div class="card-header">
@@ -91,32 +135,58 @@
 
     {{#iszoom}}
         {{#zoomconfigured}}
-            <div class="card mod_livestream-zoombox">
-                <div class="card-body text-center">
-                    <p class="mb-3">
-                        <i class="icon fa fa-video-camera fa-2x" aria-hidden="true"></i>
-                    </p>
-                    {{#canmanage}}
+            {{#canmanage}}
+                <div class="card mt-4 mod_livestream-zoombox">
+                    <div class="card-header">
+                        <i class="icon fa fa-video-camera" aria-hidden="true"></i>
+                        {{#str}} zoomteacherheading, mod_livestream {{/str}}
+                    </div>
+                    <div class="card-body">
+                        {{#zoomembed}}
+                            <p>{{#str}} zoomembedhelp, mod_livestream {{/str}}</p>
+                        {{/zoomembed}}
                         {{#zoomstarturl}}
-                            <a href="{{zoomstarturl}}" target="_blank" rel="noopener" class="btn btn-primary btn-lg mb-2">
+                            <a href="{{zoomstarturl}}" target="_blank" rel="noopener" class="btn btn-primary mb-2">
                                 {{#str}} startmeeting, mod_livestream {{/str}}
                             </a>
-                            <br>
                         {{/zoomstarturl}}
-                    {{/canmanage}}
-                    <a href="{{zoomjoinurl}}" target="_blank" rel="noopener" class="btn {{#canmanage}}btn-secondary{{/canmanage}}{{^canmanage}}btn-primary btn-lg{{/canmanage}} mb-3">
-                        {{#str}} joinmeeting, mod_livestream {{/str}}
-                    </a>
-                    <dl class="row justify-content-center mb-0">
-                        <dt class="col-sm-3 text-sm-end">{{#str}} meetingid, mod_livestream {{/str}}</dt>
-                        <dd class="col-sm-4 text-sm-start">{{zoommeetingid}}</dd>
-                        {{#zoompasscode}}
-                            <dt class="col-sm-3 text-sm-end">{{#str}} zoompasscode, mod_livestream {{/str}}</dt>
-                            <dd class="col-sm-4 text-sm-start">{{zoompasscode}}</dd>
-                        {{/zoompasscode}}
-                    </dl>
+                        <a href="{{zoomjoinurl}}" target="_blank" rel="noopener" class="btn btn-secondary mb-2">
+                            {{#str}} joinmeeting, mod_livestream {{/str}}
+                        </a>
+                        <dl class="row mb-0 mt-2">
+                            <dt class="col-sm-3">{{#str}} meetingid, mod_livestream {{/str}}</dt>
+                            <dd class="col-sm-9">{{zoommeetingid}}</dd>
+                            {{#zoompasscode}}
+                                <dt class="col-sm-3">{{#str}} zoompasscode, mod_livestream {{/str}}</dt>
+                                <dd class="col-sm-9">{{zoompasscode}}</dd>
+                            {{/zoompasscode}}
+                        </dl>
+                    </div>
                 </div>
-            </div>
+            {{/canmanage}}
+
+            {{#zoomjoinonly}}
+                {{^canmanage}}
+                    <div class="card mod_livestream-zoombox">
+                        <div class="card-body text-center">
+                            <p class="mb-3">
+                                <i class="icon fa fa-video-camera fa-2x" aria-hidden="true"></i>
+                            </p>
+                            <a href="{{zoomjoinurl}}" target="_blank" rel="noopener" class="btn btn-primary btn-lg mb-3">
+                                {{#str}} joinmeeting, mod_livestream {{/str}}
+                            </a>
+                            <dl class="row justify-content-center mb-0">
+                                <dt class="col-sm-3 text-sm-end">{{#str}} meetingid, mod_livestream {{/str}}</dt>
+                                <dd class="col-sm-4 text-sm-start">{{zoommeetingid}}</dd>
+                                {{#zoompasscode}}
+                                    <dt class="col-sm-3 text-sm-end">{{#str}} zoompasscode, mod_livestream {{/str}}</dt>
+                                    <dd class="col-sm-4 text-sm-start">{{zoompasscode}}</dd>
+                                {{/zoompasscode}}
+                            </dl>
+                        </div>
+                    </div>
+                {{/canmanage}}
+            {{/zoomjoinonly}}
         {{/zoomconfigured}}
         {{^zoomconfigured}}
             <div class="alert alert-warning">
@@ -125,12 +195,14 @@
         {{/zoomconfigured}}
     {{/iszoom}}
 
-    {{#recordingurl}}
-        <div class="mt-4">
-            <a href="{{recordingurl}}" target="_blank" rel="noopener" class="btn btn-outline-secondary">
-                <i class="icon fa fa-play-circle" aria-hidden="true"></i>
-                {{#str}} watchrecording, mod_livestream {{/str}}
-            </a>
-        </div>
-    {{/recordingurl}}
+    {{^showplayer}}
+        {{#recordingurl}}
+            <div class="mt-4">
+                <a href="{{recordingurl}}" target="_blank" rel="noopener" class="btn btn-outline-secondary">
+                    <i class="icon fa fa-play-circle" aria-hidden="true"></i>
+                    {{#str}} watchrecording, mod_livestream {{/str}}
+                </a>
+            </div>
+        {{/recordingurl}}
+    {{/showplayer}}
 </div>

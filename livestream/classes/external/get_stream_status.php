@@ -22,9 +22,10 @@ use core_external\external_single_structure;
 use core_external\external_value;
 
 /**
- * Checks whether the HLS stream of an OBS-mode activity is live.
+ * Reports whether an activity's HLS stream is live, and (when it is not)
+ * the URL of its most recent recording so the page can offer a replay.
  *
- * The check runs server-side so the browser never hits CORS issues
+ * Both checks run server-side so the browser never hits CORS issues
  * against the media server.
  *
  * @package    mod_livestream
@@ -51,7 +52,7 @@ class get_stream_status extends external_api {
      * @return array live status
      */
     public static function execute(int $cmid): array {
-        global $CFG, $DB;
+        global $CFG, $DB, $USER;
         require_once($CFG->libdir . '/filelib.php');
 
         ['cmid' => $cmid] = self::validate_parameters(self::execute_parameters(), ['cmid' => $cmid]);
@@ -64,20 +65,31 @@ class get_stream_status extends external_api {
         $livestream = $DB->get_record('livestream', ['id' => $cm->instance], '*', MUST_EXIST);
         $config = get_config('mod_livestream');
 
-        $live = false;
-        if ((int) $livestream->streamtype === 0 && !empty($config->hlsbaseurl)) {
-            $url = rtrim($config->hlsbaseurl, '/') . '/' . $livestream->streamkey . '/index.m3u8';
-            $curl = new \curl();
-            $curl->head($url, [
-                'CURLOPT_TIMEOUT' => 5,
-                'CURLOPT_CONNECTTIMEOUT' => 3,
-                'CURLOPT_FOLLOWLOCATION' => 1,
-            ]);
-            $httpcode = $curl->get_info()['http_code'] ?? 0;
-            $live = ($httpcode >= 200 && $httpcode < 300);
+        // Both OBS mode and Zoom-relayed streams arrive at the same HLS path,
+        // so the liveness probe is identical for either type.
+        $live = \mod_livestream\local\mediamtx_client::is_live($config->hlsbaseurl ?? '', $livestream->streamkey);
+
+        // The player polls this continuously while live, so it doubles as the
+        // "still watching" heartbeat for attendance. Excludes guests (no real
+        // identity to record) and managers/teachers (their own preview isn't
+        // an attendee) -- everyone else viewing counts.
+        if (!isguestuser() && !has_capability('mod/livestream:managestream', $context)) {
+            \mod_livestream\local\attendance::touch((int) $livestream->id, (int) $USER->id, $live);
         }
 
-        return ['live' => $live];
+        // When offline, offer a replay. A manually entered recording URL always
+        // wins; otherwise auto-discover the latest clip from the media server.
+        $recordingurl = '';
+        if (!$live) {
+            if (!empty($livestream->recordingurl)) {
+                $recordingurl = $livestream->recordingurl;
+            } else if (!empty($config->playbackbaseurl)) {
+                $recordingurl = \mod_livestream\local\mediamtx_client::latest_recording_url(
+                    $config->playbackbaseurl, $livestream->streamkey);
+            }
+        }
+
+        return ['live' => $live, 'recordingurl' => $recordingurl];
     }
 
     /**
@@ -88,6 +100,8 @@ class get_stream_status extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'live' => new external_value(PARAM_BOOL, 'Whether the stream is currently live'),
+            'recordingurl' => new external_value(PARAM_URL,
+                'URL of the most recent recording when offline, or empty', VALUE_DEFAULT, ''),
         ]);
     }
 }

@@ -27,9 +27,37 @@ defined('MOODLE_INTERNAL') || die();
 $functions = [
     'mod_livestream_get_stream_status' => [
         'classname' => 'mod_livestream\external\get_stream_status',
-        'description' => 'Checks whether the OBS/HLS stream of an activity is currently live.',
+        'description' => 'Checks whether an activity\'s HLS stream is live, and returns the latest recording URL when it is not.',
         'type' => 'read',
         'ajax' => true,
         'capabilities' => 'mod/livestream:view',
+    ],
+    'mod_livestream_get_course_live_status' => [
+        'classname' => 'mod_livestream\external\get_course_live_status',
+        'description' => 'Checks whether any embeddable live stream in a course is currently live, for the course navigation badge.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'mod/livestream:view',
+    ],
+    'mod_livestream_send_chat_message' => [
+        'classname' => 'mod_livestream\external\send_chat_message',
+        'description' => 'Posts a message to a livestream activity\'s ephemeral live chat.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'mod/livestream:chat',
+    ],
+    'mod_livestream_get_chat_messages' => [
+        'classname' => 'mod_livestream\external\get_chat_messages',
+        'description' => 'Returns new live chat messages for a livestream activity since a given message id.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'mod/livestream:chat',
+    ],
+    'mod_livestream_delete_chat_message' => [
+        'classname' => 'mod_livestream\external\delete_chat_message',
+        'description' => 'Deletes a live chat message (moderation).',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'mod/livestream:managestream',
     ],
 ];

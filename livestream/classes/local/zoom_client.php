@@ -113,6 +113,45 @@ class zoom_client {
     }
 
     /**
+     * Configures a meeting's custom live stream so Zoom pushes it to our
+     * media server. Zoom publishes to "<streamurl>/<streamkey>", which is the
+     * same RTMP path OBS would use, so the lesson appears in the embedded
+     * Moodle player exactly like OBS mode.
+     *
+     * The Zoom account must have "Allow live streaming of meetings → Custom Live
+     * Streaming Service" enabled, and the OAuth app must hold a live-streaming
+     * write scope, or Zoom returns an error.
+     *
+     * @param string $meetingid Zoom meeting id
+     * @param string $streamurl RTMP base, e.g. rtmp://media.example.com:1935
+     * @param string $streamkey the activity stream key (RTMP path)
+     * @param string $pageurl URL of the page where the stream is displayed
+     */
+    public function set_livestream(string $meetingid, string $streamurl, string $streamkey, string $pageurl): void {
+        $this->request('PATCH', '/meetings/' . urlencode($meetingid) . '/livestream', [
+            'stream_url' => $streamurl,
+            'stream_key' => $streamkey,
+            'page_url' => $pageurl,
+        ]);
+    }
+
+    /**
+     * Starts or stops the custom live stream of an in-progress meeting.
+     *
+     * Only works while the meeting is actually running (a host has joined);
+     * otherwise Zoom rejects it. Teachers can also toggle it from the Zoom
+     * client ("More → Live on Custom Live Streaming Service").
+     *
+     * @param string $meetingid Zoom meeting id
+     * @param bool $start true to start, false to stop
+     */
+    public function set_livestream_status(string $meetingid, bool $start): void {
+        $this->request('PATCH', '/meetings/' . urlencode($meetingid) . '/livestream/status', [
+            'action' => $start ? 'start' : 'stop',
+        ]);
+    }
+
+    /**
      * Obtains (and memoizes) an access token via account_credentials grant.
      *
      * @return string bearer token
