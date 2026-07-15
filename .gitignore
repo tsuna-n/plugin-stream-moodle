@@ -4,3 +4,6 @@
 # OS / editor cruft.
 .DS_Store
 *.swp
+
+# MediaMTX recordings (lesson clips) — not source
+media-server/recordings/

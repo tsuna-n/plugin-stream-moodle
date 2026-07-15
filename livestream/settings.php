@@ -51,6 +51,15 @@ if ($ADMIN->fulltree) {
         get_string('settinghlsjsurl_desc', 'mod_livestream'),
         'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js', PARAM_URL));
 
+    // Base URL of the MediaMTX playback server (port 9996). When set, a
+    // "watch recording" link appears automatically once a stream ends. Leave
+    // empty to keep recordings on disk only. Must be reachable from students'
+    // browsers (and, like HLS, served over HTTPS on an HTTPS Moodle).
+    $settings->add(new admin_setting_configtext('mod_livestream/playbackbaseurl',
+        get_string('settingplaybackbaseurl', 'mod_livestream'),
+        get_string('settingplaybackbaseurl_desc', 'mod_livestream'),
+        '', PARAM_URL));
+
     // --- Zoom ----------------------------------------------------------------.
     $settings->add(new admin_setting_heading('mod_livestream/zoomheading',
         get_string('settingszoomheading', 'mod_livestream'),

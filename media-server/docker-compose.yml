@@ -4,7 +4,9 @@ services:
     container_name: livestream-mediamtx
     restart: unless-stopped
     ports:
-      - "1935:1935"   # RTMP ingest (OBS publishes here)
+      - "1935:1935"   # RTMP ingest (OBS or Zoom custom live stream publishes here)
       - "8888:8888"   # HLS playback (Moodle player reads here)
+      - "9996:9996"   # Recording playback (Moodle "watch recording" reads here)
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+      - ./recordings:/recordings   # finished lessons are kept here

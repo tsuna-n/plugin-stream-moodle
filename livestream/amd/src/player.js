@@ -16,9 +16,14 @@
 /**
  * HLS live player with live-status polling for mod_livestream.
  *
- * Polls the server every POLL_INTERVAL ms until the stream is live, then
- * attaches hls.js (or native HLS on Safari) to the <video> element. If the
- * stream drops, it goes back to polling.
+ * Polls the server every POLL_INTERVAL ms for as long as the page is open --
+ * before going live, and continuously while live too (not just before).
+ * Attaches hls.js (or native HLS on Safari) to the <video> element once live;
+ * if the server-side probe reports offline again, or playback fatally errors
+ * client-side, it goes back to showing the offline state (the poll loop
+ * itself never stops, so either signal is picked up within one interval).
+ * Continuing to poll while live also doubles as this activity's "still
+ * watching" signal for attendance tracking, server-side.
  *
  * @module     mod_livestream/player
  * @copyright  2026 Your Name
@@ -50,19 +55,20 @@ define(['core/ajax', 'core/str'], function(Ajax, Str) {
     };
 
     /**
-     * Asks Moodle whether the stream is live (server-side manifest check).
+     * Asks Moodle whether the stream is live, and for the latest recording URL
+     * when it is not (both resolved server-side).
      *
      * @param {Number} cmid course module id
-     * @return {Promise<Boolean>}
+     * @return {Promise<Object>} {live: Boolean, recordingurl: String}
      */
     var fetchStatus = function(cmid) {
         return Ajax.call([{
             methodname: 'mod_livestream_get_stream_status',
             args: {cmid: cmid}
         }])[0].then(function(response) {
-            return response.live;
+            return response;
         }).catch(function() {
-            return false;
+            return {live: false, recordingurl: ''};
         });
     };
 
@@ -123,6 +129,8 @@ define(['core/ajax', 'core/str'], function(Ajax, Str) {
         var badge = root.querySelector('[data-region="status-badge"]');
         var playerWrap = container.querySelector('[data-region="player-wrap"]');
         var offlineMsg = container.querySelector('[data-region="offline-message"]');
+        var recordingRegion = container.querySelector('[data-region="recording"]');
+        var recordingLink = container.querySelector('[data-region="recording-link"]');
         var video = document.getElementById('livestream-video-' + config.cmid);
         var playing = false;
 
@@ -145,26 +153,51 @@ define(['core/ajax', 'core/str'], function(Ajax, Str) {
             offlineMsg.style.display = live ? 'none' : '';
         };
 
+        // Shows the "watch recording" link when a replay URL is available and
+        // the stream is not live; hides it otherwise.
+        var setRecording = function(url) {
+            if (!recordingRegion) {
+                return;
+            }
+            if (url) {
+                if (recordingLink) {
+                    recordingLink.href = url;
+                }
+                recordingRegion.style.display = '';
+            } else {
+                recordingRegion.style.display = 'none';
+            }
+        };
+
+        // Fires on a client-side fatal error (hls.js, or the native <video>
+        // element). Only updates state/UI -- the perpetual poll() loop below
+        // is always running and will pick up the offline state on its own
+        // next tick, so this does not need to (and must not) start a second,
+        // overlapping timer chain.
         var onStreamDied = function() {
             playing = false;
             setLive(false);
-            setTimeout(poll, POLL_INTERVAL);
         };
 
         var poll = function() {
-            if (playing) {
-                return;
-            }
-            fetchStatus(config.cmid).then(function(live) {
-                if (live && !playing) {
-                    playing = true;
-                    setLive(true);
-                    return attachPlayer(video, config.hlsurl, config.hlsjsurl, onStreamDied);
-                }
-                if (!live) {
+            fetchStatus(config.cmid).then(function(status) {
+                if (status.live) {
+                    if (!playing) {
+                        playing = true;
+                        setLive(true);
+                        setRecording('');
+                        attachPlayer(video, config.hlsurl, config.hlsjsurl, onStreamDied);
+                    }
+                    // Already playing: this tick is just confirming still-live
+                    // (and, server-side, an attendance heartbeat) -- no UI change.
+                } else {
+                    // Server-side probe is authoritative: notice the stream
+                    // ended even if the player itself never raised an error.
+                    playing = false;
                     setLive(false);
-                    setTimeout(poll, POLL_INTERVAL);
+                    setRecording(status.recordingurl);
                 }
+                setTimeout(poll, POLL_INTERVAL);
                 return null;
             }).catch(function() {
                 playing = false;

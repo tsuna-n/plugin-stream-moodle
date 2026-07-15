@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/livestream/db" VERSION="20260713" COMMENT="XMLDB file for Moodle mod/livestream"
+<XMLDB PATH="mod/livestream/db" VERSION="20260716" COMMENT="XMLDB file for Moodle mod/livestream"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -28,6 +28,55 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="livestream_session" COMMENT="One row per live broadcast (go-live to go-offline) of a livestream activity">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="livestreamid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to livestream.id"/>
+        <FIELD NAME="starttime" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the stream was first detected live"/>
+        <FIELD NAME="endtime" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the stream was detected offline again, 0 = still live"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="livestreamid" TYPE="foreign" FIELDS="livestreamid" REFTABLE="livestream" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="livestreamid_endtime" UNIQUE="false" FIELDS="livestreamid, endtime"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="livestream_attendance" COMMENT="Per-user first/last-seen timestamps while a session was live, for roll call">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sessionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to livestream_session.id"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to user.id"/>
+        <FIELD NAME="firstseen" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="lastseen" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sessionid" TYPE="foreign" FIELDS="sessionid" REFTABLE="livestream_session" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sessionid_userid" UNIQUE="true" FIELDS="sessionid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="livestream_chat" COMMENT="Ephemeral live-only chat messages, purged when the broadcast session ends">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="livestreamid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to livestream.id"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to user.id"/>
+        <FIELD NAME="message" TYPE="char" LENGTH="500" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="livestreamid" TYPE="foreign" FIELDS="livestreamid" REFTABLE="livestream" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="livestreamid_id" UNIQUE="false" FIELDS="livestreamid, id"/>
       </INDEXES>
     </TABLE>
   </TABLES>

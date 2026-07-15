@@ -22,12 +22,35 @@ hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 # Allow the Moodle page (different origin) to fetch the playlist and segments.
-hlsAllowOrigin: "*"
+hlsAllowOrigins: ['*']
+
+# --- Recording playback server ----------------------------------------------
+# Serves finished recordings back over HTTP so Moodle can offer a
+# "watch recording" link once a stream ends:
+#   list one path's recordings:  GET /list?path=<streamkey>
+#   download/stream a recording: GET /get?path=<streamkey>&start=<ISO8601>&duration=<sec>&format=mp4
+playback: yes
+playbackAddress: :9996
+# Browsers on an HTTPS Moodle must be able to reach this; put it behind the
+# same TLS reverse proxy as HLS in production.
 
 # --- Disable everything not needed ------------------------------------------
 rtsp: no
 webrtc: no
 srt: no
+
+# --- Recording defaults (apply to every path) -------------------------------
+# Every published stream (OBS or a Zoom custom live stream) is written to disk
+# so the lesson is kept after it ends. Files land under ./recordings on the
+# host (bind-mounted to /recordings in the container). recordDeleteAfter: 0s
+# keeps them forever — set a duration (e.g. 720h) to auto-prune old lessons.
+pathDefaults:
+  record: yes
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 0s
 
 # Accept any path (the plugin's random stream keys arrive as paths).
 paths:
