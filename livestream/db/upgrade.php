@@ -86,5 +86,52 @@ function xmldb_livestream_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026071600, 'livestream');
     }
 
+    if ($oldversion < 2026071700) {
+        // Zoom moves from one site-wide admin-configured account to a
+        // personal account per teacher (see classes/local/zoom_account.php),
+        // since different teachers may hold entirely separate Zoom
+        // organisations. zoomownerid records whose credentials own an
+        // activity's zoommeetingid.
+        $table = new xmldb_table('livestream');
+        $field = new xmldb_field('zoomownerid', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'zoompasscode');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $table = new xmldb_table('livestream_zoom_account');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('accountid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, '');
+        $table->add_field('clientid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, '');
+        $table->add_field('clientsecret', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, '');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('userid', XMLDB_KEY_FOREIGN_UNIQUE, ['userid'], 'user', ['id']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // The site-wide Zoom credentials are superseded by the per-teacher
+        // account table above; drop them rather than leave stale secrets
+        // sitting unused in config_plugins.
+        unset_config('zoomaccountid', 'mod_livestream');
+        unset_config('zoomclientid', 'mod_livestream');
+        unset_config('zoomclientsecret', 'mod_livestream');
+
+        upgrade_mod_savepoint(true, 2026071700, 'livestream');
+    }
+
+    if ($oldversion < 2026071701) {
+        // The zoomownerid foreign key needs a supporting index.
+        $table = new xmldb_table('livestream');
+        $index = new xmldb_index('zoomownerid', XMLDB_INDEX_NOTUNIQUE, ['zoomownerid']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_mod_savepoint(true, 2026071701, 'livestream');
+    }
+
     return true;
 }

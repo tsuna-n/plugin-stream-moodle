@@ -114,6 +114,7 @@ if ($iszoom) {
     $data['zoompasscode'] = $livestream->zoompasscode;
     if ($canmanage) {
         $data['zoomstarturl'] = $livestream->zoomstarturl ?: '';
+        $data['managezoomaccounturl'] = (new moodle_url('/mod/livestream/zoomaccount.php'))->out(false);
     }
 }
 

@@ -38,16 +38,20 @@ class zoom_client {
     /** @var string cached access token for this request. */
     private $token = null;
 
-    /** @var \stdClass plugin config (zoomaccountid, zoomclientid, zoomclientsecret). */
+    /** @var \stdClass this teacher's Zoom credentials (accountid, clientid, clientsecret). */
     private $config;
 
     /**
-     * Constructor. Throws if Zoom credentials are not configured.
+     * Constructor. Throws if this user has no personal Zoom credentials configured.
+     *
+     * Each teacher may hold a separate Zoom account/organisation, so
+     * credentials are looked up per-user rather than from site-wide config.
+     *
+     * @param int $userid owner of the Zoom account to act as
      */
-    public function __construct() {
-        $this->config = get_config('mod_livestream');
-        if (empty($this->config->zoomaccountid) || empty($this->config->zoomclientid)
-                || empty($this->config->zoomclientsecret)) {
+    public function __construct(int $userid) {
+        $this->config = zoom_account::get($userid);
+        if ($this->config === null) {
             throw new \moodle_exception('errorzoomnotconfigured', 'mod_livestream');
         }
     }
@@ -163,11 +167,11 @@ class zoom_client {
 
         $curl = new \curl();
         $curl->setHeader('Authorization: Basic ' . base64_encode(
-            $this->config->zoomclientid . ':' . $this->config->zoomclientsecret));
+            $this->config->clientid . ':' . $this->config->clientsecret));
 
         $response = $curl->post(self::TOKEN_URL, [
             'grant_type' => 'account_credentials',
-            'account_id' => $this->config->zoomaccountid,
+            'account_id' => $this->config->accountid,
         ]);
 
         $decoded = json_decode($response);

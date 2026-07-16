@@ -60,23 +60,11 @@ if ($ADMIN->fulltree) {
         get_string('settingplaybackbaseurl_desc', 'mod_livestream'),
         '', PARAM_URL));
 
-    // --- Zoom ----------------------------------------------------------------.
+    // Zoom has no site-wide setting: each teacher may hold a separate Zoom
+    // account/organisation, so credentials are entered per-teacher at
+    // My courses -> (course) -> "My Zoom account" (mod/livestream/zoomaccount.php),
+    // not here.
     $settings->add(new admin_setting_heading('mod_livestream/zoomheading',
         get_string('settingszoomheading', 'mod_livestream'),
         get_string('settingszoomheading_desc', 'mod_livestream')));
-
-    $settings->add(new admin_setting_configtext('mod_livestream/zoomaccountid',
-        get_string('settingzoomaccountid', 'mod_livestream'),
-        get_string('settingzoomaccountid_desc', 'mod_livestream'),
-        '', PARAM_TEXT));
-
-    $settings->add(new admin_setting_configtext('mod_livestream/zoomclientid',
-        get_string('settingzoomclientid', 'mod_livestream'),
-        get_string('settingzoomclientid_desc', 'mod_livestream'),
-        '', PARAM_TEXT));
-
-    $settings->add(new admin_setting_configpasswordunmask('mod_livestream/zoomclientsecret',
-        get_string('settingzoomclientsecret', 'mod_livestream'),
-        get_string('settingzoomclientsecret_desc', 'mod_livestream'),
-        ''));
 }
