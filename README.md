@@ -3,7 +3,7 @@
 A Moodle activity module that lets teachers broadcast live lessons to students, two ways:
 
 - **OBS / media server** — the teacher streams from OBS Studio to your self-hosted media server (MediaMTX, included as a docker-compose setup). Students watch an embedded HLS player right inside Moodle, with automatic LIVE detection.
-- **Zoom** — the plugin creates a Zoom meeting automatically through the Zoom API (Server-to-Server OAuth). When the media server is configured, Zoom's *custom live streaming* relays the meeting into the **same embedded player**, so students watch inside Moodle without opening Zoom; otherwise they get a plain *Join* button.
+- **Zoom** — the plugin creates a Zoom meeting automatically through the Zoom API (Server-to-Server OAuth), using each teacher's own Zoom account — different teachers may hold entirely separate Zoom accounts/organisations, so there is no single site-wide Zoom credential. When the media server is configured, Zoom's *custom live streaming* relays the meeting into the **same embedded player**, so students watch inside Moodle without opening Zoom; otherwise they get a plain *Join* button.
 
 Every stream (OBS or Zoom-relayed) is **recorded to disk**, and once it ends a *Watch recording* button appears automatically.
 
@@ -43,50 +43,81 @@ php admin/cli/upgrade.php
 
 ## 2. Set up the media server (OBS mode)
 
-On any host with Docker (can be the Moodle server itself):
+The `media-server` docker-compose ships MediaMTX **and** a [Caddy](https://caddyserver.com)
+reverse proxy that gets you real HTTPS with a free auto-renewing Let's
+Encrypt certificate, with no manual certbot steps. Only Caddy (80/443) and
+RTMP (1935) are reachable from outside the container network — HLS (8888)
+and the playback API (9996) are internal-only, reached exclusively through
+Caddy over HTTPS.
+
+You need **two** subdomains, each with an A/AAAA record already pointing at
+the server's public IP before you start the stack (Caddy requests a
+certificate for each on first boot) — e.g. `live.media.example.com` and
+`vod.media.example.com`. They can't be one domain with two paths: MediaMTX's
+HLS server issues an absolute-path redirect on the very first request that a
+shared-domain path split breaks (see the comment in `Caddyfile` if curious).
 
 ```bash
 cd media-server
+cp .env.example .env
+# edit .env: set HLS_DOMAIN, PLAYBACK_DOMAIN to your real subdomains, ACME_EMAIL to a real address
 docker compose up -d
 ```
 
 This exposes:
 
-- `rtmp://<server>:1935` — where OBS (or Zoom) publishes
-- `http://<server>:8888` — where the player reads HLS
-- `http://<server>:9996` — where finished recordings are served (playback)
+- `rtmp://<any-domain-pointing-here>:1935` — where OBS (or Zoom) publishes (RTMP doesn't go through Caddy, so any hostname/IP that resolves to the server works)
+- `https://<HLS_DOMAIN>` — where the player reads HLS
+- `https://<PLAYBACK_DOMAIN>` — where finished recordings are served
 
 Recordings are written to `media-server/recordings/<streamkey>/` on the host
 (a bind mount) and kept indefinitely; set `recordDeleteAfter` in `mediamtx.yml`
 to auto-prune old lessons.
 
-**Production notes**
-
-- Put HLS **and** playback behind HTTPS (students' browsers block mixed content on an HTTPS Moodle). The simplest option is a reverse proxy (Caddy/nginx) in front of ports 8888 and 9996.
-- Open ports 1935 (teachers only, if you can restrict) and 443 (students, via the proxy).
-- The stream key is the only thing protecting the publish path — always use HTTPS/RTMPS where possible and keep keys private.
+Firewall / cloud security group: open **80/tcp**, **443/tcp** (+443/udp for
+HTTP/3, optional), and **1935/tcp**. Nothing else needs to be reachable from
+the internet. The stream key is the only thing protecting the publish and
+playback paths, which is exactly why everything runs over HTTPS here —
+restrict 1935 to known teacher/Zoom-cloud IPs at the firewall too if your
+setup allows it.
 
 Then in Moodle: **Site administration → Plugins → Activity modules → Live stream**
 
 | Setting | Example |
 |---|---|
 | RTMP server URL | `rtmp://media.example.com:1935` |
-| HLS base URL | `https://media.example.com` (reverse proxy → port 8888) |
-| Recording playback URL | `https://media.example.com/playback` (reverse proxy → port 9996) |
+| HLS base URL | `https://live.media.example.com` |
+| Recording playback URL | `https://vod.media.example.com` |
 
 The HLS and playback URLs must be reachable **both** from students' browsers and
 from the Moodle server itself — the LIVE check and recording lookup run
 server-side. The plugin bypasses Moodle's SSRF port allowlist for these
-admin-configured URLs, so a media server on non-standard ports (8888/9996)
-works even without a proxy; but students still need HTTPS in production.
+admin-configured URLs, so this works even if Moodle and the media server sit
+on different hosts/ports.
+
+### Running without Caddy (local dev / your own proxy)
+
+For local testing (as in the dev instance driving this doc) you don't need
+Caddy at all — run MediaMTX alone and use plain HTTP, or front it with your
+own existing reverse proxy instead. Comment out or remove the `caddy` service
+from `docker-compose.yml`, publish `8888` and `9996` from the `mediamtx`
+service directly (see git history for the previous, Caddy-less compose file),
+and point the plugin settings at those ports (or your own proxy) instead of
+`HLS_DOMAIN`/`PLAYBACK_DOMAIN`. If you use your own proxy instead of Caddy,
+keep HLS and playback on separate hostnames (or otherwise proxied at the
+root, not a stripped path prefix) for the same reason noted above.
 
 ## 3. Set up Zoom (Zoom mode)
 
-1. Go to [marketplace.zoom.us](https://marketplace.zoom.us) → **Develop → Build App → Server-to-Server OAuth**.
-2. Add the scope `meeting:write:meeting` (and `meeting:write:meeting:admin` for account-level apps). For the embedded relay below, also add the live-streaming write scope (`meeting:update:meeting` / `meeting:write:admin` covers the `/livestream` endpoint).
-3. Activate the app and copy the **Account ID**, **Client ID**, **Client Secret** into the plugin settings.
+Zoom has no site-wide setting — each **teacher** connects their own Zoom account, since different teachers may hold entirely separate Zoom accounts/organisations. There is nothing for the site administrator to configure here.
 
-Meetings are created under the account of the OAuth app (`users/me`). Waiting room is enabled and join-before-host disabled by default.
+Each teacher who wants to use Zoom mode:
+
+1. Goes to [marketplace.zoom.us](https://marketplace.zoom.us) → **Develop → Build App → Server-to-Server OAuth** (on their own Zoom account).
+2. Adds the scope `meeting:write:meeting` (and `meeting:write:meeting:admin` for account-level apps). For the embedded relay below, also add the live-streaming write scope (`meeting:update:meeting` / `meeting:write:admin` covers the `/livestream` endpoint).
+3. Activates the app, then in any Moodle course goes to **Live streams → Manage my Zoom account** (`mod/livestream/zoomaccount.php`) and pastes in the **Account ID**, **Client ID**, **Client Secret**.
+
+Meetings are created under that teacher's own account (`users/me` of their app). Waiting room is enabled and join-before-host disabled by default. A teacher must connect their Zoom account before they can save a Zoom-type activity; the form shows an error with a link to the page above otherwise.
 
 ### Zoom into the embedded player (optional)
 
@@ -107,7 +138,7 @@ Latency of a Zoom-relayed stream is higher than OBS direct (Zoom adds ~20–30 s
 
 1. In a course, *Add an activity* → **Live stream**, pick the type, optionally schedule a start time (it lands in the course calendar).
 2. *OBS mode*: open the activity — a teacher-only box shows the **Server URL** and **Stream key**. In OBS: Settings → Stream → Custom, paste both, then *Start Streaming*.
-3. *Zoom mode*: the meeting is created on save; open the activity and press **Start meeting**. With the media server configured, then in the Zoom client choose **More → Live on Custom Live Streaming Service** to push the meeting into the embedded player; otherwise students just join Zoom directly.
+3. *Zoom mode*: first connect a Zoom account once via **Manage my Zoom account** (course navigation) if you haven't already — the meeting is then created on save, under your own Zoom account. Open the activity and press **Start meeting**. With the media server configured, then in the Zoom client choose **More → Live on Custom Live Streaming Service** to push the meeting into the embedded player; otherwise students just join Zoom directly.
 4. After class, a **Watch recording** button appears automatically once the recording is available (needs the *Recording playback URL* setting). You can still paste a manual **Recording URL** on the activity to override it.
 
 **Student**
@@ -131,8 +162,8 @@ Both features only apply where the plugin controls the viewing experience — OB
 1. ติดตั้งปลั๊กอิน: คัดลอกโฟลเดอร์ `livestream` ไปไว้ที่ `mod/livestream` (บน Moodle 5.1+ คือ `public/mod/livestream`) แล้วเข้า **Site administration → Notifications**
 2. โหมด OBS: รัน media server ด้วย `docker compose up -d` ในโฟลเดอร์ `media-server` แล้วตั้งค่า RTMP/HLS URL ในหน้าตั้งค่าปลั๊กอิน
 3. ครูสร้างกิจกรรม "ถ่ายทอดสด" ในรายวิชา → เปิดกิจกรรมจะเห็น Server URL และ Stream key → นำไปใส่ใน OBS (Settings → Stream → Custom) → กด Start Streaming
-4. นักเรียนเปิดกิจกรรม วิดีโอจะเล่นอัตโนมัติเมื่อครูเริ่มสตรีม และหลังสอนจบจะมีปุ่ม "ดูย้อนหลัง" ให้อัตโนมัติ (ตั้งค่า "URL สำหรับดูย้อนหลัง" = พอร์ต 9996) ระหว่างเรียนนักเรียนพิมพ์คุยกันได้ในกล่อง "แชทสด" ใต้เครื่องเล่น (แชทจะถูกล้างทิ้งหลังจบคาบ)
-5. โหมด Zoom: ผู้ดูแลระบบใส่ Account ID / Client ID / Client Secret ของแอป Server-to-Server OAuth ในหน้าตั้งค่าปลั๊กอิน — ระบบจะสร้างห้องประชุมให้อัตโนมัติเมื่อครูบันทึกกิจกรรม หากตั้งค่า media server ไว้ด้วย Zoom จะส่งภาพเข้าเครื่องเล่นที่ฝังในหน้ากิจกรรม (นักเรียนไม่ต้องเปิด Zoom) โดยครูเลือก **More → Live on Custom Live Streaming Service** ในโปรแกรม Zoom เพื่อออกอากาศ
+4. นักเรียนเปิดกิจกรรม วิดีโอจะเล่นอัตโนมัติเมื่อครูเริ่มสตรีม และหลังสอนจบจะมีปุ่ม "ดูย้อนหลัง" ให้อัตโนมัติ (ตั้งค่า "URL สำหรับดูย้อนหลัง" = โดเมนย่อยของ playback เช่น `https://vod.media.example.com` ผ่าน Caddy) ระหว่างเรียนนักเรียนพิมพ์คุยกันได้ในกล่อง "แชทสด" ใต้เครื่องเล่น (แชทจะถูกล้างทิ้งหลังจบคาบ)
+5. โหมด Zoom: **ครูแต่ละคน** (ไม่ใช่ผู้ดูแลระบบ) ไปที่ "จัดการบัญชี Zoom ของฉัน" ในเมนูนำทางของรายวิชา แล้วใส่ Account ID / Client ID / Client Secret ของแอป Server-to-Server OAuth ของตัวเอง เพราะครูแต่ละคนอาจมีบัญชี Zoom คนละบัญชีกัน — ระบบจะสร้างห้องประชุมให้อัตโนมัติเมื่อครูบันทึกกิจกรรม หากตั้งค่า media server ไว้ด้วย Zoom จะส่งภาพเข้าเครื่องเล่นที่ฝังในหน้ากิจกรรม (นักเรียนไม่ต้องเปิด Zoom) โดยครูเลือก **More → Live on Custom Live Streaming Service** ในโปรแกรม Zoom เพื่อออกอากาศ
 6. ครูดูรายชื่อนักเรียนที่เข้าฟัง (เช็กชื่อ) ได้ที่ลิงก์ "Attendance" ในหน้ากิจกรรม ระบบนับเฉพาะช่วงที่นักเรียนดูตอนถ่ายทอดสดจริงเท่านั้น แยกตามรอบการสอน และดาวน์โหลดเป็น CSV ได้
 
 ## Notes & limitations
