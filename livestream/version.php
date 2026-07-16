@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_livestream';
-$plugin->version   = 2026071600;
+$plugin->version   = 2026071701;
 $plugin->requires  = 2024042200; // Moodle 4.4.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.2.0';
+$plugin->release   = '1.3.0';

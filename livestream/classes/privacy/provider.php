@@ -33,6 +33,12 @@ use core_privacy\local\request\writer;
  * covered separately by Zoom's own policies and declared as an external
  * location.
  *
+ * Also stores livestream_zoom_account: a teacher's personal Zoom
+ * Server-to-Server OAuth credentials (teachers may hold entirely separate
+ * Zoom accounts/organisations, so this is per-user rather than site
+ * config). It is not tied to a course or activity, so it is scoped to the
+ * user's own CONTEXT_USER context rather than a module context.
+ *
  * livestream_chat is deliberately NOT covered here: it is ephemeral by
  * design (every row is deleted automatically within minutes of the
  * broadcast it belongs to ending -- see classes/local/attendance.php and
@@ -63,6 +69,12 @@ class provider implements
             'lastseen' => 'privacy:metadata:livestream_attendance:lastseen',
         ], 'privacy:metadata:livestream_attendance');
 
+        $collection->add_database_table('livestream_zoom_account', [
+            'accountid' => 'privacy:metadata:livestream_zoom_account:accountid',
+            'clientid' => 'privacy:metadata:livestream_zoom_account:clientid',
+            'clientsecret' => 'privacy:metadata:livestream_zoom_account:clientsecret',
+        ], 'privacy:metadata:livestream_zoom_account');
+
         $collection->add_external_location_link('zoom', [
             'fullname' => 'privacy:metadata:zoom:fullname',
             'email' => 'privacy:metadata:zoom:email',
@@ -78,6 +90,8 @@ class provider implements
      * @return contextlist
      */
     public static function get_contexts_for_userid(int $userid): contextlist {
+        global $DB;
+
         $contextlist = new contextlist();
 
         $sql = "SELECT ctx.id
@@ -94,6 +108,10 @@ class provider implements
             'userid' => $userid,
         ]);
 
+        if ($DB->record_exists('livestream_zoom_account', ['userid' => $userid])) {
+            $contextlist->add_user_context($userid);
+        }
+
         return $contextlist;
     }
 
@@ -103,7 +121,17 @@ class provider implements
      * @param userlist $userlist
      */
     public static function get_users_in_context(userlist $userlist) {
+        global $DB;
+
         $context = $userlist->get_context();
+
+        if ($context instanceof \context_user) {
+            if ($DB->record_exists('livestream_zoom_account', ['userid' => $context->instanceid])) {
+                $userlist->add_user($context->instanceid);
+            }
+            return;
+        }
+
         if (!$context instanceof \context_module) {
             return;
         }
@@ -131,6 +159,24 @@ class provider implements
         $userid = $contextlist->get_user()->id;
 
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_user) {
+                if ((int) $context->instanceid !== $userid) {
+                    continue;
+                }
+                $account = $DB->get_record('livestream_zoom_account', ['userid' => $userid]);
+                if ($account) {
+                    writer::with_context($context)->export_data(
+                        [get_string('zoomaccounttitle', 'mod_livestream')],
+                        (object) [
+                            'accountid' => $account->accountid,
+                            'clientid' => $account->clientid,
+                            'clientsecret' => $account->clientsecret,
+                        ]
+                    );
+                }
+                continue;
+            }
+
             if (!$context instanceof \context_module) {
                 continue;
             }
@@ -172,6 +218,11 @@ class provider implements
     public static function delete_data_for_all_users_in_context(\context $context) {
         global $DB;
 
+        if ($context instanceof \context_user) {
+            $DB->delete_records('livestream_zoom_account', ['userid' => $context->instanceid]);
+            return;
+        }
+
         if (!$context instanceof \context_module) {
             return;
         }
@@ -199,6 +250,13 @@ class provider implements
         $userid = $contextlist->get_user()->id;
 
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_user) {
+                if ((int) $context->instanceid === $userid) {
+                    $DB->delete_records('livestream_zoom_account', ['userid' => $userid]);
+                }
+                continue;
+            }
+
             if (!$context instanceof \context_module) {
                 continue;
             }
@@ -226,6 +284,14 @@ class provider implements
         global $DB;
 
         $context = $userlist->get_context();
+
+        if ($context instanceof \context_user) {
+            if (in_array($context->instanceid, $userlist->get_userids())) {
+                $DB->delete_records('livestream_zoom_account', ['userid' => $context->instanceid]);
+            }
+            return;
+        }
+
         if (!$context instanceof \context_module) {
             return;
         }

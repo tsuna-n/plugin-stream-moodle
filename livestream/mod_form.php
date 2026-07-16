@@ -58,6 +58,11 @@ class mod_livestream_mod_form extends moodleform_mod {
         $mform->addHelpButton('streamtype', 'streamtype', 'mod_livestream');
         $mform->setDefault('streamtype', LIVESTREAM_TYPE_OBS);
 
+        $zoomaccounturl = new moodle_url('/mod/livestream/zoomaccount.php');
+        $mform->addElement('static', 'zoomaccountlink', '',
+            html_writer::link($zoomaccounturl, get_string('managezoomaccount', 'mod_livestream'), ['target' => '_blank']));
+        $mform->hideIf('zoomaccountlink', 'streamtype', 'neq', LIVESTREAM_TYPE_ZOOM);
+
         $mform->addElement('date_time_selector', 'starttime', get_string('starttime', 'mod_livestream'),
             ['optional' => true]);
         $mform->addHelpButton('starttime', 'starttime', 'mod_livestream');
@@ -87,11 +92,12 @@ class mod_livestream_mod_form extends moodleform_mod {
      * @return array errors
      */
     public function validation($data, $files) {
+        global $USER;
+
         $errors = parent::validation($data, $files);
 
         if ((int) $data['streamtype'] === LIVESTREAM_TYPE_ZOOM) {
-            $config = get_config('mod_livestream');
-            if (empty($config->zoomaccountid) || empty($config->zoomclientid) || empty($config->zoomclientsecret)) {
+            if (!\mod_livestream\local\zoom_account::exists((int) $USER->id)) {
                 $errors['streamtype'] = get_string('errorzoomnotconfigured', 'mod_livestream');
             }
         } else {
