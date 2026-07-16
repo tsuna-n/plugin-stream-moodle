@@ -7,3 +7,10 @@
 
 # MediaMTX recordings (lesson clips) — not source
 media-server/recordings/
+
+# Per-deployment domain/email — copy media-server/.env.example instead.
+media-server/.env
+
+# Caddy's own state if ever run outside Docker (certs, OCSP staples).
+media-server/caddy_data/
+media-server/caddy_config/

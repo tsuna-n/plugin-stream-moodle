@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Two subdomains, not one domain with two paths: MediaMTX's HLS server issues
+# an absolute-path redirect (a cookie-check hop) on the very first request,
+# unaware of any prefix it's mounted under — a shared-domain "/hls/*" and
+# "/playback/*" split strips that prefix and the redirect 404s. Proxying each
+# service at the root of its own subdomain sidesteps the problem entirely.
+# Point mod_livestream's settings at:
+#   HLS base URL             https://{$HLS_DOMAIN}
+#   Recording playback URL   https://{$PLAYBACK_DOMAIN}
+{$HLS_DOMAIN} {
+	encode gzip
+	reverse_proxy mediamtx:8888
+}
+
+{$PLAYBACK_DOMAIN} {
+	encode gzip
+	reverse_proxy mediamtx:9996
+}

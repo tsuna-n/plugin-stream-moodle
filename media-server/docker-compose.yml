@@ -4,9 +4,43 @@ services:
     container_name: livestream-mediamtx
     restart: unless-stopped
     ports:
-      - "1935:1935"   # RTMP ingest (OBS or Zoom custom live stream publishes here)
-      - "8888:8888"   # HLS playback (Moodle player reads here)
-      - "9996:9996"   # Recording playback (Moodle "watch recording" reads here)
+      # RTMP ingest only — this is the one port that must stay directly
+      # reachable, since OBS (and Zoom's cloud, in Zoom-relay mode) publish
+      # straight to it and Caddy cannot reverse-proxy raw RTMP.
+      - "1935:1935"
+    # HLS (8888) and the recording playback API (9996) are deliberately NOT
+    # published here: only Caddy talks to them, over the internal "media"
+    # network, so the only way in from the internet is through HTTPS.
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
       - ./recordings:/recordings   # finished lessons are kept here
+    networks:
+      - media
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: livestream-caddy
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    ports:
+      - "80:80"        # ACME HTTP challenge + redirect to HTTPS
+      - "443:443"       # HTTPS for students' browsers
+      - "443:443/udp"   # HTTP/3 (optional; harmless if blocked upstream)
+    environment:
+      - HLS_DOMAIN=${HLS_DOMAIN:?set HLS_DOMAIN in .env}
+      - PLAYBACK_DOMAIN=${PLAYBACK_DOMAIN:?set PLAYBACK_DOMAIN in .env}
+      - ACME_EMAIL=${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # issued certificates; Caddy renews automatically
+      - caddy_config:/config
+    networks:
+      - media
+
+networks:
+  media:
+
+volumes:
+  caddy_data:
+  caddy_config:
