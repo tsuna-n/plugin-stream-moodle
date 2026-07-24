@@ -940,3 +940,98 @@ format, HTTP contract, guardrails 12 ข้อที่ห้ามทำ) ก�
 - [`docs/usage-th.md`](docs/usage-th.md) — คู่มือใช้งานฉบับย่อ + ค่าตัวอย่างของเครื่อง dev
 - [`README.md`](README.md) — คู่มือติดตั้ง + production notes
 - หัวข้อ 1–16 ด้านบน — คำอธิบายโค้ด/สถาปัตยกรรมของทุกไฟล์
+
+---
+
+## 18. คู่มือตั้งค่า OBS → Moodle แบบ step by step
+
+หัวข้อนี้สอนวิธี **สตรีมจาก OBS ให้ขึ้นในหน้ากิจกรรม Moodle** ตั้งแต่ศูนย์ อ้างอิง flow จริงของ
+โหมด OBS (ดูโค้ดที่เกี่ยวข้องได้ที่ §3.3 `view.php`, §4.1 `get_stream_status`, §13.1 flow)
+
+**ภาพรวม 1 บรรทัด**
+```
+OBS ── RTMP :1935 ──▶ media server (MediaMTX) ── HLS :8888 ──▶ เครื่องเล่นในหน้ากิจกรรม Moodle
+```
+ครูสตรีมจาก OBS → ปลั๊กอินตรวจเจอว่าไลฟ์ (poll `get_stream_status` ทุก 10 วิ) → เครื่องเล่นในหน้า
+Moodle เด้งเป็น 🔴 LIVE เองภายใน ~10 วินาที
+
+### ✅ ก่อนเริ่ม เช็ค 2 อย่าง
+1. **แอดมินตั้งค่า media server แล้ว** — *Site administration → Plugins → Activity modules → Live
+   stream* ต้องมี **RTMP server URL** และ **HLS base URL** (ถ้าว่าง ฟอร์มสร้างกิจกรรม OBS จะไม่ให้บันทึก — ดู §3.4 `validation()`)
+2. **คุณเป็นครู** (มีสิทธิ์ `mod/livestream:addinstance`)
+
+### ขั้นที่ 1 — สร้างกิจกรรม Live stream (โหมด OBS)
+1. เข้ารายวิชา → เปิด **Edit mode** → **Add an activity or resource** → **Live stream**
+2. ตั้งค่า: **Name** = ชื่อคาบ, **Stream type** = **OBS / media server**, (ไม่บังคับ) **Scheduled start**
+3. กด **Save and display**
+
+### ขั้นที่ 2 — คัดลอก Server URL + Stream key จากหน้ากิจกรรม
+เปิดกิจกรรมในฐานะครู จะเห็น **กล่อง OBS setup** (นักเรียนไม่เห็น) มี 2 ค่า:
+
+| ช่อง | ตัวอย่าง (เครื่อง dev) |
+|---|---|
+| **Server URL** | `rtmp://10.0.150.190:1935` |
+| **Stream key** | `ef7873b3dfe22fb8b47341fab7bd860c` (สุ่มไม่ซ้ำต่อกิจกรรม) |
+
+> 🔑 Stream key เป็นรหัสลับของสตรีมนี้ — อย่าโพสต์สาธารณะ (ใครมี key ก็สตรีมแทนได้)
+
+### ขั้นที่ 3 — ติดตั้ง OBS (ถ้ายังไม่มี)
+โหลดฟรีจาก **obsproject.com** (Windows / macOS / Linux) → ติดตั้ง → เปิดโปรแกรม
+
+### ขั้นที่ 4 — ใส่ค่าสตรีมใน OBS  ⭐ หัวใจสำคัญ
+**Settings → Stream**
+- **Service:** เลือก **Custom...**
+- **Server:** วาง Server URL จากขั้นที่ 2 (เช่น `rtmp://10.0.150.190:1935`)
+- **Stream Key:** วาง Stream key จากขั้นที่ 2
+- กด **Apply**
+
+> ⚠️ Server กับ Key อยู่คนละช่อง — **อย่ารวม key ต่อท้าย URL**
+
+### ขั้นที่ 5 — ตั้ง encoder ให้ไลฟ์ลื่น (สำคัญเรื่อง latency)
+**Settings → Output → Output Mode = Advanced** แล้วแท็บ **Streaming**:
+
+| ตั้งค่า | แนะนำ | ทำไม |
+|---|---|---|
+| **Keyframe Interval** | **2 วินาที** (หรือ 1) | ⭐ สำคัญสุด — MediaMTX ตัด HLS segment ตาม keyframe ถ้าปล่อย 0 (auto) จะ latency สูง/เริ่มเล่นช้า |
+| Rate Control | **CBR** | บิตเรตคงที่ ภาพนิ่ง |
+| Bitrate | 720p ≈ **2500–4000 Kbps** / 1080p ≈ 4500–6000 | ตามความเร็ว upload |
+| Encoder | x264 (หรือ NVENC/QSV ถ้าการ์ดจอรองรับ) | ลดโหลด CPU |
+| Audio Bitrate | 128–160 Kbps | — |
+
+**Settings → Video:** Output Resolution 1280×720 (หรือ 1920×1080), FPS 25 หรือ 30
+
+> ถ้าใช้ Output Mode = **Simple** จะตั้ง Keyframe Interval ตรงๆ ไม่ได้ — แนะนำใช้ **Advanced**
+
+### ขั้นที่ 6 — ใส่สิ่งที่จะออกอากาศ (Sources)
+ในกล่อง **Sources** (ล่างซ้าย) กด **+**: **Display Capture** (ทั้งจอ) / **Window Capture**
+(เฉพาะหน้าต่าง เช่น สไลด์) / **Video Capture Device** (กล้อง) / **Audio Input Capture** (ไมค์) —
+ใส่ซ้อนกันได้ จัดตำแหน่งในพื้นที่ preview
+
+### ขั้นที่ 7 — เริ่มสตรีม
+กด **Start Streaming** (ขวาล่าง) → มุมล่าง OBS ขึ้นสถานะเขียว + bitrate เดินอยู่ = ภาพส่งเข้า media server แล้ว
+
+### ขั้นที่ 8 — กลับไปดูใน Moodle
+กลับไปหน้ากิจกรรม (หรือให้นักเรียนเปิด):
+- ป้ายเปลี่ยน **Offline → 🔴 LIVE** เองภายใน ~10 วินาที (ไม่ต้อง refresh) และวิดีโอเล่นในหน้าเลย
+- นักเรียนเข้าได้ 2 ทาง: คลิกกิจกรรมตรงๆ **หรือ** เมนู **"Stream" → เลือกสตรีมที่ LIVE** (ดู §17.10)
+- ระบบเริ่มนับ **เช็กชื่อ** อัตโนมัติ (ครูดู/โหลด CSV ที่ลิงก์ Attendance — ดู §17.8)
+
+### ขั้นที่ 9 — จบคาบ
+กด **Stop Streaming** ใน OBS → ปลั๊กอินปิด session + ลบแชท + **ปุ่ม "ดูย้อนหลัง"** โผล่ให้นักเรียนเอง
+(ถ้าแอดมินตั้ง Recording playback URL ไว้)
+
+### 🔧 แก้ปัญหาเร็ว
+| อาการ | แก้ |
+|---|---|
+| OBS แดง / bitrate = 0 | Server/Key ผิด หรือพอร์ต 1935 ถูกบล็อก — ตรวจ 2 ค่าจากขั้นที่ 2 อีกครั้ง |
+| OBS เขียวแล้วแต่ Moodle ยัง Offline | รอ ~10 วิ / refresh 1 ครั้ง; ถ้ายัง = Moodle เข้าถึง `<HLS base URL>/<key>/index.m3u8` ไม่ได้ (แอดมินเช็ก HLS base URL) |
+| เล่นแล้วกระตุก/เริ่มช้า | ตั้ง **Keyframe Interval = 2** (ขั้นที่ 5) แล้วสตรีมใหม่ |
+| นักเรียนจอดำ (Moodle เป็น HTTPS) | HLS ต้องเป็น HTTPS ด้วย — แอดมินรัน media server ผ่าน Caddy (ดู §12.2) |
+
+### 💡 เทสได้โดยไม่มี OBS (ใช้ ffmpeg ยิง test pattern)
+```bash
+ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=25 -f lavfi -i sine=frequency=440 \
+  -c:v libx264 -preset ultrafast -tune zerolatency -g 50 -c:a aac \
+  -f flv rtmp://10.0.150.190:1935/<stream-key>
+```
+`-g 50` = keyframe ทุก 50 เฟรมที่ 25fps (= 2 วินาที) เทียบเท่า Keyframe Interval = 2 ใน OBS
