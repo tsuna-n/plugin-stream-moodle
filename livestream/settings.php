@@ -67,4 +67,23 @@ if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_heading('mod_livestream/zoomheading',
         get_string('settingszoomheading', 'mod_livestream'),
         get_string('settingszoomheading_desc', 'mod_livestream')));
+
+    // --- Realtime gateway (full streaming push, optional) --------------------.
+    $settings->add(new admin_setting_heading('mod_livestream/realtimeheading',
+        get_string('settingsrealtimeheading', 'mod_livestream'),
+        get_string('settingsrealtimeheading_desc', 'mod_livestream')));
+
+    // Empty default is deliberate: this is the on/off switch for the whole
+    // feature (classes/local/realtime.php::enabled()). Empty means every
+    // browser surface keeps polling exactly as it does today -- zero risk for
+    // installs that never deploy the realtime/ gateway.
+    $settings->add(new admin_setting_configtext('mod_livestream/realtimeurl',
+        get_string('settingrealtimeurl', 'mod_livestream'),
+        get_string('settingrealtimeurl_desc', 'mod_livestream'),
+        '', PARAM_URL));
+
+    $settings->add(new admin_setting_configpasswordunmask('mod_livestream/realtimesecret',
+        get_string('settingrealtimesecret', 'mod_livestream'),
+        get_string('settingrealtimesecret_desc', 'mod_livestream'),
+        ''));
 }
