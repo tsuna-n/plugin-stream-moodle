@@ -161,6 +161,11 @@
                                 <dd class="col-sm-9">{{zoompasscode}}</dd>
                             {{/zoompasscode}}
                         </dl>
+                        <p class="text-muted small mt-2 mb-0">
+                            <a href="{{managezoomaccounturl}}" target="_blank" rel="noopener">
+                                {{#str}} managezoomaccount, mod_livestream {{/str}}
+                            </a>
+                        </p>
                     </div>
                 </div>
             {{/canmanage}}
@@ -191,6 +196,11 @@
         {{^zoomconfigured}}
             <div class="alert alert-warning">
                 {{#str}} zoommeetingmissing, mod_livestream {{/str}}
+                {{#canmanage}}
+                    <a href="{{managezoomaccounturl}}" target="_blank" rel="noopener">
+                        {{#str}} managezoomaccount, mod_livestream {{/str}}
+                    </a>
+                {{/canmanage}}
             </div>
         {{/zoomconfigured}}
     {{/iszoom}}

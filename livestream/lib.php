@@ -103,14 +103,16 @@ function livestream_update_instance($data, $mform = null) {
             $data->zoommeetingid = $old->zoommeetingid;
             $data->zoomjoinurl = $old->zoomjoinurl;
             $data->zoomstarturl = $old->zoomstarturl;
+            $data->zoomownerid = $old->zoomownerid;
             livestream_sync_zoom_meeting($data);
         }
     } else if (!empty($old->zoommeetingid)) {
         // Switched away from Zoom: remove the remote meeting, keep local data clean.
-        livestream_delete_zoom_meeting($old->zoommeetingid);
+        livestream_delete_zoom_meeting($old->zoommeetingid, (int) $old->zoomownerid);
         $data->zoommeetingid = '';
         $data->zoomjoinurl = '';
         $data->zoomstarturl = '';
+        $data->zoomownerid = null;
     }
 
     $DB->update_record('livestream', $data);
@@ -135,7 +137,7 @@ function livestream_delete_instance($id) {
     }
 
     if (!empty($livestream->zoommeetingid)) {
-        livestream_delete_zoom_meeting($livestream->zoommeetingid);
+        livestream_delete_zoom_meeting($livestream->zoommeetingid, (int) $livestream->zoomownerid);
     }
 
     $sessionids = $DB->get_fieldset_select('livestream_session', 'id', 'livestreamid = ?', [$id]);
@@ -155,14 +157,19 @@ function livestream_delete_instance($id) {
 /**
  * Creates a Zoom meeting for the given instance data and stores the result on it.
  *
- * Failures are surfaced to the teacher but do not abort saving the activity,
- * so a misconfigured Zoom connection never loses form data.
+ * The meeting is created under the current user's own Zoom account (see
+ * classes/local/zoom_account.php) — teachers may hold entirely separate
+ * Zoom accounts/organisations, so there is no single site-wide Zoom identity
+ * to create it under. Failures are surfaced to the teacher but do not abort
+ * saving the activity, so a misconfigured Zoom connection never loses form data.
  *
  * @param stdClass $data instance data, modified in place
  */
 function livestream_create_zoom_meeting($data) {
+    global $USER;
+
     try {
-        $client = new \mod_livestream\local\zoom_client();
+        $client = new \mod_livestream\local\zoom_client((int) $USER->id);
         $meeting = $client->create_meeting(
             $data->name,
             (int) ($data->starttime ?? 0),
@@ -172,6 +179,7 @@ function livestream_create_zoom_meeting($data) {
         $data->zoommeetingid = (string) $meeting->id;
         $data->zoomjoinurl = $meeting->join_url;
         $data->zoomstarturl = $meeting->start_url;
+        $data->zoomownerid = (int) $USER->id;
         if (!empty($meeting->password)) {
             $data->zoompasscode = $meeting->password;
         }
@@ -179,6 +187,7 @@ function livestream_create_zoom_meeting($data) {
         $data->zoommeetingid = '';
         $data->zoomjoinurl = '';
         $data->zoomstarturl = '';
+        $data->zoomownerid = null;
         \core\notification::error(get_string('zoomcreatefailed', 'mod_livestream', $e->getMessage()));
         return;
     }
@@ -189,11 +198,11 @@ function livestream_create_zoom_meeting($data) {
 /**
  * Pushes topic/time changes for an existing meeting to Zoom (best effort).
  *
- * @param stdClass $data instance data
+ * @param stdClass $data instance data (needs zoomownerid, the meeting's owner)
  */
 function livestream_sync_zoom_meeting($data) {
     try {
-        $client = new \mod_livestream\local\zoom_client();
+        $client = new \mod_livestream\local\zoom_client((int) $data->zoomownerid);
         $client->update_meeting(
             $data->zoommeetingid,
             $data->name,
@@ -213,7 +222,7 @@ function livestream_sync_zoom_meeting($data) {
  * embedded Moodle player. No-op (best effort) when the media server isn't
  * configured — such a site just keeps the plain join-Zoom behaviour.
  *
- * @param stdClass $data instance data (needs zoommeetingid, streamkey, course)
+ * @param stdClass $data instance data (needs zoommeetingid, zoomownerid, streamkey, course)
  */
 function livestream_configure_zoom_livestream($data) {
     global $CFG;
@@ -227,7 +236,7 @@ function livestream_configure_zoom_livestream($data) {
     }
 
     try {
-        $client = new \mod_livestream\local\zoom_client();
+        $client = new \mod_livestream\local\zoom_client((int) $data->zoomownerid);
         $client->set_livestream(
             $data->zoommeetingid,
             $config->rtmpserver,
@@ -243,10 +252,11 @@ function livestream_configure_zoom_livestream($data) {
  * Deletes a Zoom meeting (best effort).
  *
  * @param string $meetingid Zoom meeting id
+ * @param int $ownerid id of the user whose Zoom account owns the meeting
  */
-function livestream_delete_zoom_meeting($meetingid) {
+function livestream_delete_zoom_meeting($meetingid, int $ownerid) {
     try {
-        $client = new \mod_livestream\local\zoom_client();
+        $client = new \mod_livestream\local\zoom_client($ownerid);
         $client->delete_meeting($meetingid);
     } catch (\moodle_exception $e) {
         // The activity is being removed either way; a stale Zoom meeting is harmless.
@@ -305,6 +315,19 @@ function livestream_update_calendar($data) {
  */
 function livestream_extend_navigation_course(navigation_node $navigation, stdClass $course, context_course $context) {
     global $DB, $PAGE;
+
+    // Available as soon as a teacher could create a Zoom activity, not only
+    // once one already exists, so they can connect their Zoom account first.
+    if (has_capability('mod/livestream:addinstance', $context)) {
+        $navigation->add(
+            get_string('managezoomaccount', 'mod_livestream'),
+            new moodle_url('/mod/livestream/zoomaccount.php'),
+            navigation_node::TYPE_CUSTOM,
+            null,
+            'livestreamzoomaccount',
+            new pix_icon('i/settings', '')
+        );
+    }
 
     if (!has_capability('mod/livestream:view', $context)) {
         return;

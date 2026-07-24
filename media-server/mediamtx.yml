@@ -1,11 +1,23 @@
 # MediaMTX configuration for the Moodle mod_livestream plugin.
 #
-# Flow: OBS publishes RTMP to rtmp://<server>:1935/<streamkey>
-#       Students play HLS from  http(s)://<server>:8888/<streamkey>/index.m3u8
+# Flow: OBS/Zoom publish RTMP to   rtmp://<domain>:1935/<streamkey>
+#       Students play HLS from     https://<HLS_DOMAIN>/<streamkey>/index.m3u8
 #
-# The stream key is a 32-character random secret generated per activity by the
-# plugin, so path secrecy is the access control for publishing. Keep this
-# server behind HTTPS (see README) so keys are never sent in clear text.
+# HLS and playback are proxied (by Caddy) on their own separate subdomains,
+# each at the proxy root — not one domain split by path — because MediaMTX's
+# HLS server issues an absolute-path cookie-check redirect on the first
+# request that a stripped path prefix breaks. See Caddyfile.
+#
+# In the docker-compose.yml shipped alongside this file, ports 8888
+# (hlsAddress) and 9996 (playbackAddress) below are NOT published to the
+# host — only the Caddy container can reach them, over the internal Docker
+# network, and Caddy is what actually terminates HTTPS for students'
+# browsers (see Caddyfile). Only 1935 (RTMP) is exposed directly, since raw
+# RTMP can't be reverse-proxied by Caddy.
+#
+# The stream key is a 32-character random secret generated per activity by
+# the plugin, so path secrecy is the access control for publishing and
+# viewing — this is exactly why HTTPS end-to-end matters here.
 
 logLevel: info
 
@@ -22,6 +34,9 @@ hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 # Allow the Moodle page (different origin) to fetch the playlist and segments.
+# '*' works everywhere with zero config; for tighter security once you know
+# your real Moodle URL, restrict it instead, e.g.:
+#   hlsAllowOrigins: ['https://moodle.example.com']
 hlsAllowOrigins: ['*']
 
 # --- Recording playback server ----------------------------------------------
@@ -31,8 +46,6 @@ hlsAllowOrigins: ['*']
 #   download/stream a recording: GET /get?path=<streamkey>&start=<ISO8601>&duration=<sec>&format=mp4
 playback: yes
 playbackAddress: :9996
-# Browsers on an HTTPS Moodle must be able to reach this; put it behind the
-# same TLS reverse proxy as HLS in production.
 
 # --- Disable everything not needed ------------------------------------------
 rtsp: no
